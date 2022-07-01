@@ -1,0 +1,52 @@
+version: "3.9"
+   
+services:
+  account-api:
+    build: django-api/.
+    image: django-api:latest
+    command: >
+      sh -c "python manage.py makemigrations && python manage.py migrate && python manage.py loaddata fixtures/*.json && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./django-api:/code
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  redis:
+    restart: always
+    image: redis:latest
+    expose:
+        - '6379'
+    ports:
+      - "6379:6379"
+
+
+  account-sync-worker-group1:
+    image: django-api:latest
+    command: celery -A account_scheduler worker -c 2 -l INFO
+    volumes:
+      - ./django-api:/code
+    depends_on:
+      - account-api
+
+  account-sync-worker-group2:
+    image: django-api:latest
+    command: celery -A account_scheduler worker -c 2 -l INFO
+    volumes:
+      - ./django-api:/code
+    depends_on:
+      - account-api
+  
+  celery-beat:
+    image: django-api:latest
+    command: 
+      sh -c "sleep 30 && celery -A account_scheduler beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+    volumes:
+      - ./django-api:/code
+    depends_on:
+      - account-api
+
+
+volumes:
+    account-api:
